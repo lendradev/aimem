@@ -74,6 +74,40 @@ Flag boleh muncul sebelum atau sesudah argumen posisional. `aimem remember judul
 
 Project root dicari dari direktori kerja ke atas, cari `.git` lalu `go.mod`. Kalau tidak ada, direktori kerja dipakai.
 
+### Output `stats`
+
+Untuk manusia, ukuran database ditulis dengan satuan biner supaya angkanya tetap terbaca:
+
+```console
+$ aimem stats
+project (/home/you/project/.aimem/data.db)
+  size: 92.0 KiB
+  items: 3
+  signals: 0
+  relations: 0
+  embeddings: 0
+```
+
+Satuan yang dipakai: `B`, `KiB`, `MiB`, `GiB`, `TiB`, `PiB`. Nilai di bawah 1 KiB tetap ditampilkan sebagai byte bulat (`512 B`), di atasnya satu angka desimal.
+
+Untuk mesin, `--json` tetap menyimpan jumlah byte mentah di `size_bytes`. Field itu tidak berubah:
+
+```json
+{
+  "scope": "project",
+  "path": "/home/you/project/.aimem/data.db",
+  "rows": {
+    "embeddings": 0,
+    "items": 3,
+    "relations": 0,
+    "signals": 0
+  },
+  "size_bytes": 94208
+}
+```
+
+Jadi output abbreviate hanya berlaku untuk output teks. Consumer JSON tidak terpengaruh dan tidak perlu parsing satuan.
+
 ## MCP server
 
 JSON-RPC 2.0 over stdio, satu pesan JSON per baris. Protocol version `2024-11-05`.

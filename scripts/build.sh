@@ -30,7 +30,18 @@ echo "built $DIST_DIR/aimem ($(du -h "$DIST_DIR/aimem" | cut -f1))"
 
 if [ "${1:-}" = "--install" ]; then
   mkdir -p "$INSTALL_DIR"
-  install -m 0755 "$DIST_DIR/aimem" "$INSTALL_DIR/aimem"
+
+  # Install to a temp file in the target directory, then rename over the
+  # old binary. A rename inside one filesystem is atomic, so the previous
+  # binary stays intact and runnable until the new one is fully in place.
+  # Writing straight to the target would truncate it first, leaving a window
+  # where a running agent could exec a half-written file.
+  TMP_BIN="$INSTALL_DIR/.aimem.install.$$"
+  trap 'rm -f "$TMP_BIN"' EXIT
+  install -m 0755 "$DIST_DIR/aimem" "$TMP_BIN"
+  mv -f "$TMP_BIN" "$INSTALL_DIR/aimem"
+  trap - EXIT
+
   echo "installed $INSTALL_DIR/aimem"
   case ":$PATH:" in
     *":$INSTALL_DIR:"*) ;;
