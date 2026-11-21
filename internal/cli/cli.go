@@ -218,10 +218,16 @@ func openEngine(dbPath string) (*engine.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := store.Open(projectPath)
-	if err != nil {
-		g.Close()
-		return nil, err
+	// An empty project path means there is no project scope. Opening a store
+	// for it would create a database in whatever directory the user happened
+	// to be standing in, so the project scope stays absent instead.
+	var p *store.Store
+	if projectPath != "" {
+		p, err = store.Open(projectPath)
+		if err != nil {
+			g.Close()
+			return nil, err
+		}
 	}
 	return engine.NewEngine(g, p), nil
 }
@@ -470,10 +476,19 @@ func cmdReflect(eng *engine.Engine, fs *flag.FlagSet, opts options, scope, outPa
 
 	md := merged.Markdown(eng.Now())
 	if outPath == "" {
-		if scope == memory.ScopeGlobal {
+		// Pick the store that matches the requested scope. Without a project
+		// root there is no project store, so the global one is the only place
+		// the lessons file can go.
+		switch {
+		case scope == memory.ScopeGlobal && eng.Global != nil:
 			outPath = filepath.Join(filepath.Dir(eng.Global.Path()), "LESSONS.md")
-		} else {
+		case eng.Project != nil:
 			outPath = filepath.Join(filepath.Dir(eng.Project.Path()), "LESSONS.md")
+		case eng.Global != nil:
+			outPath = filepath.Join(filepath.Dir(eng.Global.Path()), "LESSONS.md")
+		default:
+			fmt.Fprintln(os.Stderr, "error: no scope available to write LESSONS.md")
+			return 1
 		}
 	}
 	if err := os.WriteFile(outPath, []byte(md), 0o644); err != nil {

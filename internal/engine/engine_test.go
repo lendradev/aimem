@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -534,5 +535,63 @@ func TestResolveScopePrefersNestedWorkspaceRepo(t *testing.T) {
 	}
 	if got != inner {
 		t.Fatalf("got %q, want %q", got, inner)
+	}
+}
+
+func TestResolveScopeReportsNoProjectRoot(t *testing.T) {
+	dir := t.TempDir()
+	got, err := ResolveScope(dir)
+	if !errors.Is(err, ErrNoProjectRoot) {
+		t.Fatalf("err = %v, want ErrNoProjectRoot", err)
+	}
+	if got != "" {
+		t.Fatalf("root %q, want empty", got)
+	}
+}
+
+func TestDefaultPathsWithoutProjectRootHasNoProjectPath(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	plain := filepath.Join(dir, "plain")
+	for _, d := range []string{home, plain} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("AI_MEMORY_HOME", filepath.Join(home, ".aimem"))
+	t.Setenv("AI_MEMORY_PROJECT", "")
+
+	g, p, err := DefaultPaths(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g != filepath.Join(home, ".aimem", "data.db") {
+		t.Fatalf("global path %q", g)
+	}
+	if p != "" {
+		t.Fatalf("project path %q, want empty when there is no project root", p)
+	}
+}
+
+func TestDefaultPathsDropsProjectWhenItCollidesWithGlobal(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AI_MEMORY_HOME", filepath.Join(home, ".aimem"))
+	t.Setenv("AI_MEMORY_PROJECT", "")
+
+	// The home directory has no project marker, so the project scope must be
+	// dropped rather than pointing at the global database.
+	g, p, err := DefaultPaths(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p != "" {
+		t.Fatalf("project path %q, want empty to avoid a collision with the global scope", p)
+	}
+	if g != filepath.Join(home, ".aimem", "data.db") {
+		t.Fatalf("global path %q", g)
 	}
 }

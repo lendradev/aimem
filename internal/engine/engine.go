@@ -56,18 +56,31 @@ func (e *Engine) Store(scope string) (*store.Store, error) {
 		return e.Global, nil
 	case memory.ScopeProject:
 		if e.Project == nil {
-			return nil, errors.New("project scope is not available")
+			return nil, ErrNoProjectScope
 		}
 		return e.Project, nil
 	}
 	return nil, fmt.Errorf("unknown scope %q", scope)
 }
 
+// ErrNoProjectRoot means no project marker was found in the starting
+// directory or any parent, so there is no project scope to use.
+var ErrNoProjectRoot = errors.New("no project root found")
+
+// ErrNoProjectScope is returned when a command needs the project scope but
+// no project root could be located.
+var ErrNoProjectScope = errors.New("project scope is not available: no .git or go.mod found in this directory or any parent, and AI_MEMORY_PROJECT is not set")
+
 // ResolveScope finds the project root by walking up for .git, then go.mod,
 // then a memory data directory. When the current directory has a
 // workspace/ subdirectory that is itself a repository, that subdirectory
 // wins, because this project's layout keeps the git repository in workspace/
 // while the project root stays outside it.
+//
+// It reports ErrNoProjectRoot when no marker exists anywhere. Callers must
+// treat that as "there is no project scope", not as a failure to fall back
+// to the current directory: falling back made every unrelated directory
+// grow its own database.
 func ResolveScope(startDir string) (string, error) {
 	return resolveScope(startDir, DataDirName)
 }
@@ -86,14 +99,17 @@ func resolveScope(startDir, dataDir string) (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return startDir, nil
+			return "", ErrNoProjectRoot
 		}
 		dir = parent
 	}
 }
 
 func isRepoRoot(dir, dataDir string) bool {
-	for _, marker := range []string{".git", "go.mod", dataDir} {
+	// The legacy directory name counts as a marker too. A store left over
+	// from before the rename is still a project anchor, and dropping it
+	// would strand that data where it cannot be reached.
+	for _, marker := range []string{".git", "go.mod", dataDir, legacyDataDirName} {
 		if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
 			return true
 		}
@@ -144,6 +160,10 @@ func DataDirFor(alias string) string {
 }
 
 // DefaultPaths returns the global and project database paths.
+//
+// The project path is empty when no project root could be located. An empty
+// project path means "no project scope", and the caller must not create a
+// database for it.
 func DefaultPaths(startDir string) (globalPath, projectPath string, err error) {
 	return defaultPaths(startDir, DataDirName)
 }
@@ -165,24 +185,43 @@ func defaultPaths(startDir, dataDir string) (globalPath, projectPath string, err
 	} else {
 		globalParent = filepath.Dir(globalHome)
 	}
-	root, err := resolveScope(startDir, dataDir)
-	if err != nil {
-		return "", "", err
+	root, rootErr := resolveScope(startDir, dataDir)
+	if rootErr != nil && !errors.Is(rootErr, ErrNoProjectRoot) {
+		return "", "", rootErr
 	}
 	projectDir := os.Getenv("AI_MEMORY_PROJECT")
 	projectParent := root
 	if projectDir == "" {
-		projectDir = filepath.Join(root, dataDir)
+		if rootErr != nil {
+			// No project root. The project scope does not exist, so there is
+			// no project path to report.
+			projectPath = ""
+		} else {
+			projectDir = filepath.Join(root, dataDir)
+		}
 	} else {
 		projectParent = filepath.Dir(projectDir)
 	}
 	if err := migrateLegacyScope(globalHome, globalParent, dataDir); err != nil {
 		return "", "", err
 	}
-	if err := migrateLegacyScope(projectDir, projectParent, dataDir); err != nil {
-		return "", "", err
+	if projectDir != "" {
+		if err := migrateLegacyScope(projectDir, projectParent, dataDir); err != nil {
+			return "", "", err
+		}
 	}
-	return filepath.Join(globalHome, "data.db"), filepath.Join(projectDir, "data.db"), nil
+	globalPath = filepath.Join(globalHome, "data.db")
+	if projectDir == "" {
+		return globalPath, "", nil
+	}
+	projectPath = filepath.Join(projectDir, "data.db")
+	if projectPath == globalPath {
+		// The project root resolved to the home directory, so both scopes
+		// would point at the same file. Two stores on one database corrupt
+		// the scope separation, so the project scope is dropped instead.
+		return globalPath, "", nil
+	}
+	return globalPath, projectPath, nil
 }
 
 // migrateLegacyScope renames <parent>/.ai-memory to <parent>/<dataDir> when
@@ -286,6 +325,9 @@ func (e *Engine) Remember(opts RememberOptions) (RememberResult, error) {
 	}
 	st, err := e.Store(scope)
 	if err != nil {
+		if scope == memory.ScopeProject {
+			return res, ErrNoProjectScope
+		}
 		return res, err
 	}
 

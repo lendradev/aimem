@@ -192,3 +192,64 @@ func TestCLIGlobalScopeSeparate(t *testing.T) {
 		t.Fatalf("global scope missed the item: %q", out)
 	}
 }
+
+// A directory that is not a project must not grow a database. The old
+// fallback pointed the project scope at the current directory, so every
+// unrelated folder picked up a 92 KB .aimem directory.
+func TestCLIDoesNotCreateDatabaseOutsideAProject(t *testing.T) {
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain")
+	if err := os.MkdirAll(plain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AI_MEMORY_HOME", filepath.Join(dir, "home"))
+	t.Setenv("AI_MEMORY_PROJECT", "")
+
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(plain); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(old) })
+
+	run(t, "stats")
+
+	entries, err := os.ReadDir(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("files created outside a project: %v", names)
+	}
+}
+
+// Remembering into the project scope needs a project. Without one the command
+// must fail loudly instead of silently writing to the global scope.
+func TestCLIRememberWithoutProjectFails(t *testing.T) {
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain")
+	if err := os.MkdirAll(plain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AI_MEMORY_HOME", filepath.Join(dir, "home"))
+	t.Setenv("AI_MEMORY_PROJECT", "")
+
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(plain); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(old) })
+
+	if code := Run([]string{"remember", "no project here"}); code == 0 {
+		t.Fatal("remember succeeded without a project scope")
+	}
+}

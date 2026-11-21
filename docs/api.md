@@ -72,7 +72,11 @@ Flag boleh muncul sebelum atau sesudah argumen posisional. `aimem remember judul
 | `AI_MEMORY_HOME` | direktori untuk scope global. Default `~/.aimem` |
 | `AI_MEMORY_PROJECT` | direktori untuk scope project. Default `<project-root>/.aimem` |
 
-Project root dicari dari direktori kerja ke atas, cari `.git` lalu `go.mod`. Kalau tidak ada, direktori kerja dipakai.
+Project root dicari dari direktori kerja ke atas, mencari `.git`, `go.mod`, `package.json`, `pyproject.toml`, `Cargo.toml`, atau direktori data `.aimem`.
+
+Jika tidak ada marker di atas direktori kerja, **scope project tidak tersedia**. Tidak ada database yang dibuat di folder itu, dan perintah yang hanya membaca (`stats`, `recall`, `show`) berjalan dengan scope global saja. Perintah yang menulis dengan `--scope project` akan gagal dengan pesan jelas: jalankan dari dalam project, atau gunakan `--scope global`.
+
+Direktori home pengguna (`~`) tidak pernah dianggap sebagai project root: scope global sudah berada di sana, jadi menganggapnya sebagai project akan membuat kedua scope menabrak file database yang sama (`~/.aimem/data.db`). Gunakan variabel `AI_MEMORY_PROJECT` bila ingin menetapkan lokasi project secara eksplisit.
 
 ### Output `stats`
 
