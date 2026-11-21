@@ -4,6 +4,7 @@ date: 2026-11-21
 status: draft
 owner: Lendra
 tags: [api, cli, mcp]
+---
 # API dan CLI — AI Memory
 
 Dua antarmuka: CLI untuk manusia dan agent shell, MCP stdio server untuk agent tool. Keduanya memanggil engine yang sama.

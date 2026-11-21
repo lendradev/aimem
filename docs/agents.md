@@ -4,6 +4,7 @@ date: 2026-11-21
 status: draft
 owner: Lendra
 tags: [mcp, agent, install, setup]
+---
 # Setup MCP aimem untuk AI Agent
 
 Dokumen ini berisi dua hal:

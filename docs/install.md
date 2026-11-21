@@ -4,6 +4,7 @@ date: 2026-11-21
 status: draft
 owner: Lendra
 tags: [install, setup, mcp]
+---
 # Panduan Install aimem
 
 `aimem` adalah binary tunggal tanpa runtime dependency. Pasang sekali, lalu hubungkan ke AI agent lewat MCP.
