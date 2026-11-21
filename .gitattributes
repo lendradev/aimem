@@ -1,0 +1,23 @@
+# Force LF line endings in the working tree. Without this, a checkout on
+# Windows converts files to CRLF and gofmt then reports every file as
+# needing formatting.
+* text=auto eol=lf
+
+# Binary files must never be touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# Shell scripts must keep LF or they break on Unix.
+*.sh text eol=lf
+
+# Go sources are always LF.
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
