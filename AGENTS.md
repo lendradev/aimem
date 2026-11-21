@@ -38,7 +38,7 @@ Aturan praktis:
 
 | Skill | Pakai saat | Keluaran → lokasi |
 |---|---|---|
-| `research-and-documentation` | membandingkan opsi, feasibility, spike, keputusan teknis, mendokumentasikan kode, audit docs | laporan → `docs/`; keputusan final → `docs/adr/` |
+| `research-and-documentation` | membandingkan opsi, feasibility, spike, keputusan teknis, mendokumentasikan kode, audit docs | laporan → `docs/` |
 | `senior-backend-security` | API, database, auth, infra, performa, threat model, review keamanan, hardening | kode → `internal/`; kontrak API → `docs/api.md` |
 | `security-review` | audit keamanan source-first: review diff/PR atau full audit | temuan → `docs/`; perbaikan kode → `internal/` |
 | `karpathy-guidelines` | menulis, review, atau refactor kode: hindari over-kompleksitas, patch minimal, asumsi eksplisit, kriteria sukses terverifikasi | panduan di `internal/`, review sebelum commit |
