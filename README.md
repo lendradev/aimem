@@ -212,6 +212,7 @@ For Claude Code, add to `.mcp.json` in your project:
 ```bash
 aimem remember "judul" --kind fact --body "detail" --tag tag
 aimem remember "judul fundamental" --fundamental
+aimem mark <id>
 aimem recall "query" --limit 5 --tokens 600
 aimem show <id>
 aimem forget <id>

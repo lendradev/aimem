@@ -420,6 +420,8 @@ Rules:
   team never breaks, a physical constant), store it with `fundamental: true`.
   Prune never drops a fundamental item. Everything else is ordinary memory:
   it goes stale and is removed after five years without being recalled.
+- Use `aimem mark <id>` when a stored item turns out to be fundamental later.
+  A global rule that every session has to follow belongs there.
 - Default scope is `project`. Use `scope: "global"` only for lessons that
   hold across every repository.
 - Call `memory_feedback` after using a recalled item: `useful` when it helped,

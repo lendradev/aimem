@@ -402,6 +402,29 @@ func (e *Engine) Show(id string) (memory.Item, error) {
 	return memory.Item{}, store.ErrNotFound
 }
 
+// Mark sets or clears the fundamental flag on existing items. Fundamental
+// items survive prune no matter how old they are.
+func (e *Engine) Mark(ids []string, fundamental bool) (int, error) {
+	marked := 0
+	for _, id := range ids {
+		it, err := e.Show(id)
+		if err != nil {
+			return marked, err
+		}
+		st, err := e.Store(it.Scope)
+		if err != nil {
+			return marked, err
+		}
+		it.Fundamental = fundamental
+		it.UpdatedAt = e.now()
+		if err := st.Update(it); err != nil {
+			return marked, err
+		}
+		marked++
+	}
+	return marked, nil
+}
+
 // Forget removes items by id. It never touches the global store implicitly.
 func (e *Engine) Forget(ids []string) (int, error) {
 	removed := 0

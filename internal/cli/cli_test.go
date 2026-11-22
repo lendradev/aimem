@@ -175,6 +175,23 @@ func TestCLIRememberFundamental(t *testing.T) {
 	}
 }
 
+// Mark sets the fundamental flag on an item that was stored without it.
+func TestCLIMarkSetsFundamental(t *testing.T) {
+	withEnv(t)
+	out := run(t, "remember", "rules that always apply")
+	id := strings.Fields(out)[1]
+	run(t, "mark", id)
+	out = run(t, "show", id)
+	if !strings.Contains(out, "fundamental") {
+		t.Fatalf("show output %q", out)
+	}
+	run(t, "prune", "--idle-days", "0", "--stale-days", "0")
+	out = run(t, "show", id)
+	if !strings.Contains(out, "fundamental") {
+		t.Fatalf("marked item was pruned: %q", out)
+	}
+}
+
 // Without the fundamental flag an item is ordinary memory and goes stale.
 func TestCLIPruneDropsOrdinaryItem(t *testing.T) {
 	withEnv(t)

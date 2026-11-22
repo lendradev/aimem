@@ -83,24 +83,25 @@ func Run(args []string) int {
 
 	// Command specific flags, bound to local variables so they can be read directly.
 	var (
-		kind        string
-		body        string
-		scope       string
-		limit       int
-		tokens      int
-		full        bool
-		includeDead bool
-		outPath     string
-		correction  string
-		source      string
-		idleDays    int
-		signalDays  int
-		staleDays   int
-		allowDup    bool
-		listOnly    bool
-		fundamental bool
-		tags        stringList
-		kinds       stringList
+		kind             string
+		body             string
+		scope            string
+		limit            int
+		tokens           int
+		full             bool
+		includeDead      bool
+		outPath          string
+		correction       string
+		source           string
+		idleDays         int
+		signalDays       int
+		staleDays        int
+		allowDup         bool
+		listOnly         bool
+		fundamental      bool
+		clearFundamental bool
+		tags             stringList
+		kinds            stringList
 	)
 
 	switch cmd {
@@ -134,6 +135,8 @@ func Run(args []string) int {
 		fs.IntVar(&idleDays, "idle-days", 180, "drop unused items older than this")
 		fs.IntVar(&signalDays, "signal-days", 365, "drop signals older than this")
 		fs.IntVar(&staleDays, "stale-days", engine.StaleDays, "drop non fundamental items not recalled for this long")
+	case "mark":
+		fs.BoolVar(&clearFundamental, "clear", false, "clear the fundamental flag instead of setting it")
 	case "forget", "mcp":
 		// no extra flags
 	default:
@@ -164,6 +167,8 @@ func Run(args []string) int {
 		return cmdShow(eng, fs, opts)
 	case "forget":
 		return cmdForget(eng, fs, opts)
+	case "mark":
+		return cmdMark(eng, fs, opts, !clearFundamental)
 	case "feedback":
 		return cmdFeedback(eng, fs, opts, correction, source)
 	case "reflect":
@@ -178,7 +183,7 @@ func Run(args []string) int {
 	return 0
 }
 
-const versionNumber = "0.2.0"
+const versionNumber = "0.3.0"
 
 func usage() {
 	name := currentAlias()
@@ -189,6 +194,7 @@ Usage:
   %s recall <query> [flags]       search memory
   %s show <id> [flags]            show one item in full
   %s forget <id>... [flags]       delete items
+  %s mark <id>... [flags]         set or clear the fundamental flag
   %s feedback <id> <outcome>      record useful|dead_end|corrected
   %s promote [<id>] [flags]       move a proven item to the global scope
   %s reflect [flags]              write LESSONS.md
@@ -200,7 +206,7 @@ Usage:
 Global flags:
   --db PATH    override the database path
   --json       machine readable output
-`, name, name, name, name, name, name, name, name, name, name, name, name)
+`, name, name, name, name, name, name, name, name, name, name, name, name, name)
 }
 
 func openEngine(dbPath string) (*engine.Engine, error) {
@@ -429,6 +435,28 @@ func cmdForget(eng *engine.Engine, fs *flag.FlagSet, opts options) int {
 		return printJSON(map[string]any{"removed": n})
 	}
 	fmt.Printf("removed %d item(s)\n", n)
+	return 0
+}
+
+func cmdMark(eng *engine.Engine, fs *flag.FlagSet, opts options, fundamental bool) int {
+	args := fs.Args()
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "error: mark needs at least one id")
+		return 2
+	}
+	n, err := eng.Mark(args, fundamental)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	if opts.jsonOut {
+		return printJSON(map[string]any{"marked": n, "fundamental": fundamental})
+	}
+	if fundamental {
+		fmt.Printf("marked %d item(s) as fundamental\n", n)
+	} else {
+		fmt.Printf("cleared fundamental flag on %d item(s)\n", n)
+	}
 	return 0
 }
 

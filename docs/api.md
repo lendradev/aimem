@@ -16,6 +16,7 @@ aimem remember <title> [flags]     simpan satu item
 aimem recall <query> [flags]       cari memory
 aimem show <id> [flags]            tampilkan satu item penuh
 aimem forget <id>... [flags]       hapus item
+aimem mark <id>... [flags]         set atau kosongkan flag fundamental
 aimem feedback <id> <outcome>      catat useful|dead_end|corrected
 aimem promote [<id>] [flags]       pindahkan item terbukti ke scope global
 aimem reflect [flags]              tulis LESSONS.md
@@ -47,6 +48,7 @@ Nama binary bisa `aimem`, `ai-memory`, `aimemory`, `ai-memory-cli`, atau `aimem-
 | | `--full` | false | body penuh, abaikan batas token |
 | `feedback` | `--correction` | kosong | isi koreksi saat outcome `corrected` |
 | | `--source` | `cli` | sumber sinyal, dipakai untuk korroborasi |
+| `mark` | `--clear` | false | kosongkan flag fundamental, bukan mengesetnya |
 | `promote` | `--list` | false | hanya tampilkan kandidat, tanpa memindahkan |
 | `reflect` | `--out` | `<scope>/LESSONS.md` | path output |
 | | `--scope` | `all` | scope yang direfleksi |
@@ -275,6 +277,8 @@ Batas yang membatasi pertumbuhan:
 | Ruam kosong | dikembalikan `auto_vacuum=INCREMENTAL` + `PRAGMA incremental_vacuum` |
 | Item fundamental | tidak pernah dibuang prune, berapa pun umurnya |
 | Item yang dipakai | `use_count` naik, `last_used` diperbarui, jadi prune tidak menyentuh yang aktif |
+
+`aimem mark <id>...` mengeset flag fundamental pada item yang sudah ada, dan `aimem mark --clear <id>...` mengosongkannya. Dipakai saat sebuah knowledge ternyata fundamental belakangan, misalnya aturan global yang wajib dipatuhi setiap sesi.
 
 Item yang dihapus diprune berdasarkan `use_count = 0`, jadi item yang pernah dipakai recall tidak hilang hanya karena tidak dipakai dalam 180 hari. Setelah 1825 hari tanpa dipanggil, item non fundamental ikut dibuang: kalau tidak pernah dibutuhkan lagi, storage-nya tidak layak. Item fundamental dikecualikan dari dua aturan ini, jadi ilmu yang berlaku lintas project dan lintas tahun tetap tersimpan.
 
