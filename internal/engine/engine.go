@@ -21,11 +21,14 @@ const (
 	// DefaultLimit caps how many items one recall returns.
 	DefaultLimit = 5
 	// MaxBodyBytes is the hard cap for an item body.
-	MaxBodyBytes = 4 * 1024
+	MaxBodyBytes = 32 * 1024
 	// MaxTitleBytes is the hard cap for an item title.
 	MaxTitleBytes = 120
 	// MaxTags is the hard cap for tags on one item.
 	MaxTags = 8
+	// StaleDays is how long a non fundamental item survives without being
+	// recalled before prune treats it as stale memory.
+	StaleDays = 5 * 365
 )
 
 // Engine holds both scopes and exposes the operations the CLI and MCP server need.
@@ -261,6 +264,9 @@ type RememberOptions struct {
 	Source string
 	// AllowDuplicate stores the item even when a near-identical one exists.
 	AllowDuplicate bool
+	// Fundamental marks knowledge that stays valid across projects and years.
+	// Prune never drops it.
+	Fundamental bool
 }
 
 // RememberResult reports what happened to a remember call.
@@ -311,17 +317,18 @@ func (e *Engine) Remember(opts RememberOptions) (RememberResult, error) {
 	}
 	now := e.now()
 	it := memory.Item{
-		ID:        idgen.New(),
-		Kind:      memory.Kind(kind),
-		Title:     title,
-		Body:      body,
-		Tags:      clean,
-		Scope:     scope,
-		Source:    source,
-		Status:    memory.StatusTentative,
-		CreatedAt: now,
-		UpdatedAt: now,
-		LastUsed:  now,
+		ID:          idgen.New(),
+		Kind:        memory.Kind(kind),
+		Title:       title,
+		Body:        body,
+		Tags:        clean,
+		Scope:       scope,
+		Source:      source,
+		Status:      memory.StatusTentative,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		LastUsed:    now,
+		Fundamental: opts.Fundamental,
 	}
 	st, err := e.Store(scope)
 	if err != nil {
@@ -349,18 +356,22 @@ func (e *Engine) Remember(opts RememberOptions) (RememberResult, error) {
 // findDuplicate looks for an existing item that says the same thing as the
 // new one. The project scope is checked first, then the global scope, so a
 // project item wins over a global one.
+//
+// Token sets are built once per item, so a large body is tokenized once
+// instead of once per comparison.
 func (e *Engine) findDuplicate(st *store.Store, scope, title, body, excludeID string) (*memory.Item, float64) {
 	existing, err := st.List(scope)
 	if err != nil {
 		return nil, 0
 	}
+	newTokens := score.TokenSet(title + " " + body)
 	var best *memory.Item
 	bestScore := 0.0
 	for i := range existing {
 		if existing[i].ID == excludeID {
 			continue
 		}
-		sim := score.DuplicateScore(title+" "+body, existing[i].Title+" "+existing[i].Body)
+		sim := score.SetDuplicateScore(newTokens, score.TokenSet(existing[i].Title+" "+existing[i].Body))
 		if sim > bestScore {
 			bestScore = sim
 			best = &existing[i]
@@ -464,6 +475,8 @@ type RecallResult struct {
 	Score     float64  `json:"score"`
 	Scope     string   `json:"scope"`
 	Truncated bool     `json:"truncated,omitempty"`
+	// Fundamental marks knowledge that survives prune.
+	Fundamental bool `json:"fundamental,omitempty"`
 }
 
 // RecallOptions controls one recall call.
@@ -649,26 +662,35 @@ func (e *Engine) Recall(opts RecallOptions) ([]RecallResult, error) {
 		body := c.item.Body
 		truncated := false
 		if !opts.Full {
-			cost := EstimateTokens(c.item.Title) + EstimateTokens(body)
+			titleCost := EstimateTokens(c.item.Title)
+			cost := titleCost + EstimateTokens(body)
 			if used+cost > opts.TokenBudget && len(results) > 0 {
 				break
 			}
 			if used+cost > opts.TokenBudget {
-				body = ""
+				// Keep as much of the body as the budget allows instead of
+				// dropping it, so a large item still carries usable detail.
+				remaining := opts.TokenBudget - used - titleCost
+				if remaining <= 0 {
+					body = ""
+				} else {
+					body = truncateToTokens(body, remaining)
+				}
 				truncated = true
 			}
 		}
 		used += EstimateTokens(c.item.Title) + EstimateTokens(body)
 		results = append(results, RecallResult{
-			ID:        c.item.ID,
-			Kind:      string(c.item.Kind),
-			Title:     c.item.Title,
-			Body:      body,
-			Tags:      c.item.Tags,
-			Status:    string(c.item.Status),
-			Score:     round3(c.item.Score),
-			Scope:     c.item.Scope,
-			Truncated: truncated,
+			ID:          c.item.ID,
+			Kind:        string(c.item.Kind),
+			Title:       c.item.Title,
+			Body:        body,
+			Tags:        c.item.Tags,
+			Status:      string(c.item.Status),
+			Score:       round3(c.item.Score),
+			Scope:       c.item.Scope,
+			Truncated:   truncated,
+			Fundamental: c.item.Fundamental,
 		})
 	}
 
@@ -702,6 +724,26 @@ func EstimateTokens(s string) int {
 		return 0
 	}
 	return len(s)/4 + 4
+}
+
+// truncateToTokens cuts text down to roughly the given token count, keeping
+// whole words so the result stays readable.
+func truncateToTokens(s string, tokens int) string {
+	if tokens <= 0 || s == "" {
+		return ""
+	}
+	limit := (tokens - 4) * 4
+	if limit <= 0 {
+		return ""
+	}
+	if len(s) <= limit {
+		return s
+	}
+	cut := s[:limit]
+	if i := strings.LastIndexByte(cut, ' '); i > 0 {
+		cut = cut[:i]
+	}
+	return cut
 }
 
 // Promotion is a project item that proved useful often enough to be worth

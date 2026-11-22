@@ -413,8 +413,13 @@ Rules:
   message, symbol name, or file name as the query.
 - Call `memory_remember` for durable facts only: decisions, procedures,
   preferences, dead ends, and corrections. One fact per item. Title is one
-  sentence, max 120 bytes. Body holds the detail, max 4 KB. Add 2 to 5
+  sentence, max 120 bytes. Body holds the detail, max 32 KB. Add 2 to 5
   lowercase tags.
+- Decide before you store. If the fact is fundamental knowledge that stays
+  true across projects and years (the language the project uses, a rule the
+  team never breaks, a physical constant), store it with `fundamental: true`.
+  Prune never drops a fundamental item. Everything else is ordinary memory:
+  it goes stale and is removed after five years without being recalled.
 - Default scope is `project`. Use `scope: "global"` only for lessons that
   hold across every repository.
 - Call `memory_feedback` after using a recalled item: `useful` when it helped,

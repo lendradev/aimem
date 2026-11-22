@@ -42,6 +42,17 @@ FRA3HIFL -> status preferred, score 2.0000
 | Decay | Outcome signals halve every 30 days. Unused items get pruned. |
 | Network | None. Fully offline, no telemetry, no account. |
 
+## Fundamental vs stale memory
+
+Not every fact deserves the same lifetime.
+
+| | Lifetime |
+|---|---|
+| **Fundamental** | Knowledge that holds across projects and years: the language the project is written in, a rule the team never breaks, a physical constant. Mark it with `--fundamental` (or `fundamental: true` over MCP). Prune never drops it, no matter how old it is. |
+| **Ordinary** | Everything else. Kept while it is useful, dropped once it has not been recalled for five years. |
+
+That split is what makes a larger body budget safe. A body can be up to 32 KB, and the storage that costs is still bounded, because ordinary memory goes stale and leaves, while the few fundamental items stay forever.
+
 ## Two scopes
 
 | Scope | Path | Holds |
@@ -200,6 +211,7 @@ For Claude Code, add to `.mcp.json` in your project:
 
 ```bash
 aimem remember "judul" --kind fact --body "detail" --tag tag
+aimem remember "judul fundamental" --fundamental
 aimem recall "query" --limit 5 --tokens 600
 aimem show <id>
 aimem forget <id>

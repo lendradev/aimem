@@ -95,8 +95,10 @@ func Run(args []string) int {
 		source      string
 		idleDays    int
 		signalDays  int
+		staleDays   int
 		allowDup    bool
 		listOnly    bool
+		fundamental bool
 		tags        stringList
 		kinds       stringList
 	)
@@ -107,6 +109,7 @@ func Run(args []string) int {
 		fs.StringVar(&body, "body", "", "longer detail")
 		fs.StringVar(&scope, "scope", memory.ScopeProject, "project|global")
 		fs.BoolVar(&allowDup, "allow-duplicate", false, "store even when a similar item exists")
+		fs.BoolVar(&fundamental, "fundamental", false, "keep permanently, prune never drops it")
 		fs.Var(&tags, "tag", "repeatable tag")
 	case "promote":
 		fs.BoolVar(&listOnly, "list", false, "only list promotion candidates")
@@ -130,6 +133,7 @@ func Run(args []string) int {
 	case "prune":
 		fs.IntVar(&idleDays, "idle-days", 180, "drop unused items older than this")
 		fs.IntVar(&signalDays, "signal-days", 365, "drop signals older than this")
+		fs.IntVar(&staleDays, "stale-days", engine.StaleDays, "drop non fundamental items not recalled for this long")
 	case "forget", "mcp":
 		// no extra flags
 	default:
@@ -151,7 +155,7 @@ func Run(args []string) int {
 
 	switch cmd {
 	case "remember":
-		return cmdRemember(eng, fs, opts, kind, body, scope, tags, allowDup)
+		return cmdRemember(eng, fs, opts, kind, body, scope, tags, allowDup, fundamental)
 	case "promote":
 		return cmdPromote(eng, fs, opts, listOnly)
 	case "recall":
@@ -167,14 +171,14 @@ func Run(args []string) int {
 	case "stats":
 		return cmdStats(eng, fs, opts, scope)
 	case "prune":
-		return cmdPrune(eng, fs, opts, idleDays, signalDays)
+		return cmdPrune(eng, fs, opts, idleDays, signalDays, staleDays)
 	case "mcp":
 		return runMCP(eng)
 	}
 	return 0
 }
 
-const versionNumber = "0.1.0"
+const versionNumber = "0.2.0"
 
 func usage() {
 	name := currentAlias()
@@ -255,7 +259,7 @@ func closeEngine(eng *engine.Engine) {
 	}
 }
 
-func cmdRemember(eng *engine.Engine, fs *flag.FlagSet, opts options, kind, body, scope string, tags []string, allowDup bool) int {
+func cmdRemember(eng *engine.Engine, fs *flag.FlagSet, opts options, kind, body, scope string, tags []string, allowDup, fundamental bool) int {
 	args := fs.Args()
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "error: remember needs a title")
@@ -264,7 +268,7 @@ func cmdRemember(eng *engine.Engine, fs *flag.FlagSet, opts options, kind, body,
 	title := strings.Join(args, " ")
 	res, err := eng.Remember(engine.RememberOptions{
 		Scope: scope, Kind: kind, Title: title, Body: body, Tags: tags,
-		Source: "cli", AllowDuplicate: allowDup,
+		Source: "cli", AllowDuplicate: allowDup, Fundamental: fundamental,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -389,7 +393,8 @@ func cmdShow(eng *engine.Engine, fs *flag.FlagSet, opts options) int {
 		return printJSON(map[string]any{
 			"id": it.ID, "kind": it.Kind, "title": it.Title, "body": it.Body,
 			"tags": it.Tags, "scope": it.Scope, "status": it.Status, "score": it.Score,
-			"created_at": it.CreatedAt, "updated_at": it.UpdatedAt,
+			"fundamental": it.Fundamental,
+			"created_at":  it.CreatedAt, "updated_at": it.UpdatedAt,
 		})
 	}
 	fmt.Printf("id:      %s\n", it.ID)
@@ -398,6 +403,9 @@ func cmdShow(eng *engine.Engine, fs *flag.FlagSet, opts options) int {
 	fmt.Printf("status:  %s\n", it.Status)
 	fmt.Printf("score:   %.4f\n", it.Score)
 	fmt.Printf("tags:    %s\n", strings.Join(it.Tags, " "))
+	if it.Fundamental {
+		fmt.Println("kept:    fundamental (prune never drops it)")
+	}
 	fmt.Printf("created: %s\n", it.CreatedAt.Format(time.RFC3339))
 	fmt.Printf("title:   %s\n", it.Title)
 	if it.Body != "" {
@@ -558,13 +566,13 @@ func humanSize(n int64) string {
 	return fmt.Sprintf("%.1f PiB", value/unit)
 }
 
-func cmdPrune(eng *engine.Engine, fs *flag.FlagSet, opts options, idleDays, signalDays int) int {
+func cmdPrune(eng *engine.Engine, fs *flag.FlagSet, opts options, idleDays, signalDays, staleDays int) int {
 	total := 0
 	for _, st := range []*store.Store{eng.Project, eng.Global} {
 		if st == nil {
 			continue
 		}
-		n, err := st.Prune(eng.Now(), idleDays, signalDays)
+		n, err := st.Prune(eng.Now(), idleDays, signalDays, staleDays)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			return 1

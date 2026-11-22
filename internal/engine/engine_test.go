@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,6 +76,39 @@ func TestRememberRejectsBadInput(t *testing.T) {
 	}
 	if _, err := eng.Remember(RememberOptions{Scope: memory.ScopeProject, Kind: "fact", Title: string(long)}); err == nil {
 		t.Fatal("expected error for long title")
+	}
+}
+
+// A body of 32 KB must fit, one byte more must not.
+func TestRememberBodyLimit(t *testing.T) {
+	eng := newTestEngine(t)
+	body := strings.Repeat("a", MaxBodyBytes)
+	if _, err := eng.Remember(RememberOptions{
+		Scope: memory.ScopeProject, Kind: "fact", Title: "big body", Body: body,
+	}); err != nil {
+		t.Fatalf("body at the limit was rejected: %v", err)
+	}
+	if _, err := eng.Remember(RememberOptions{
+		Scope: memory.ScopeProject, Kind: "fact", Title: "too big", Body: body + "a",
+	}); err == nil {
+		t.Fatal("expected error for oversized body")
+	}
+}
+
+func TestRememberStoresFundamentalFlag(t *testing.T) {
+	eng := newTestEngine(t)
+	res, err := eng.Remember(RememberOptions{
+		Scope: memory.ScopeProject, Kind: "fact", Title: "physics law", Fundamental: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := eng.Show(res.Item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Fundamental {
+		t.Fatal("fundamental flag was not stored")
 	}
 }
 
@@ -240,6 +274,30 @@ func TestRecallRespectsTokenBudget(t *testing.T) {
 	}
 	if len(res) >= 5 {
 		t.Fatalf("token budget did not limit results: got %d", len(res))
+	}
+}
+
+// A body larger than the token budget must still come back partially, so a big
+// memory item stays useful without blowing the budget.
+func TestRecallKeepsPartialBodyWithinBudget(t *testing.T) {
+	eng := newTestEngine(t)
+	body := strings.Repeat("detail words here ", 500)
+	remember(t, eng, memory.ScopeProject, "fact", "large body item", body, nil)
+	res, err := eng.Recall(RecallOptions{Query: "large body", Limit: 5, TokenBudget: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("got %d results", len(res))
+	}
+	if res[0].Body == "" {
+		t.Fatal("body was dropped instead of truncated")
+	}
+	if !res[0].Truncated {
+		t.Fatal("truncated flag was not set")
+	}
+	if EstimateTokens(res[0].Body)+EstimateTokens(res[0].Title) > 100 {
+		t.Fatalf("budget exceeded: %d tokens", EstimateTokens(res[0].Body))
 	}
 }
 

@@ -100,7 +100,7 @@ source ~/.bashrc
 aimem version
 ```
 
-Output: `aimem 0.1.0`.
+Output: `aimem 0.2.0`.
 
 ---
 

@@ -68,6 +68,9 @@ type Item struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	LastUsed  time.Time
+	// Fundamental marks knowledge that stays valid across projects and
+	// years. Prune never drops it, and decay never erases it.
+	Fundamental bool
 }
 
 type Signal struct {

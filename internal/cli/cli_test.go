@@ -160,6 +160,35 @@ func TestCLIPrune(t *testing.T) {
 	}
 }
 
+func TestCLIRememberFundamental(t *testing.T) {
+	withEnv(t)
+	out := run(t, "remember", "gravity is universal", "--fundamental")
+	id := strings.Fields(out)[1]
+	out = run(t, "show", id)
+	if !strings.Contains(out, "fundamental") {
+		t.Fatalf("show output %q", out)
+	}
+	run(t, "prune", "--idle-days", "0", "--stale-days", "0")
+	out = run(t, "show", id)
+	if !strings.Contains(out, "fundamental") {
+		t.Fatalf("fundamental item was pruned: %q", out)
+	}
+}
+
+// Without the fundamental flag an item is ordinary memory and goes stale.
+func TestCLIPruneDropsOrdinaryItem(t *testing.T) {
+	withEnv(t)
+	run(t, "remember", "ordinary note")
+	out := run(t, "prune", "--idle-days", "0", "--stale-days", "0")
+	if !strings.Contains(out, "pruned 1") {
+		t.Fatalf("prune output %q", out)
+	}
+	out = run(t, "stats")
+	if !strings.Contains(out, "items: 0") {
+		t.Fatalf("ordinary item survived prune: %q", out)
+	}
+}
+
 func TestCLIHelpAndVersion(t *testing.T) {
 	if code := Run([]string{"version"}); code != 0 {
 		t.Fatalf("version exited %d", code)

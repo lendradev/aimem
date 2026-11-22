@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -151,7 +152,7 @@ func TestPruneRemovesIdleItemsOnly(t *testing.T) {
 	if err := st.Insert(fresh); err != nil {
 		t.Fatal(err)
 	}
-	n, err := st.Prune(time.Now(), 180, 365)
+	n, err := st.Prune(time.Now(), 180, 365, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +163,106 @@ func TestPruneRemovesIdleItemsOnly(t *testing.T) {
 		t.Fatal("idle item was not pruned")
 	}
 	if _, err := st.Get("new11111"); err != nil {
-		t.Fatal("fresh item was pruned")
+		t.Fatalf("fresh item was pruned")
+	}
+}
+
+// Fundamental knowledge stays even when it is old and never used. The stale
+// window drops everything else.
+func TestPruneKeepsFundamentalItems(t *testing.T) {
+	st := newStore(t)
+	fund := testItem("fund1111")
+	fund.Fundamental = true
+	fund.CreatedAt = time.Now().AddDate(0, 0, -3000)
+	fund.UpdatedAt = fund.CreatedAt
+	fund.LastUsed = fund.CreatedAt
+	if err := st.Insert(fund); err != nil {
+		t.Fatal(err)
+	}
+	plain := testItem("plai1111")
+	plain.CreatedAt = time.Now().AddDate(0, 0, -3000)
+	plain.UpdatedAt = plain.CreatedAt
+	plain.LastUsed = plain.CreatedAt
+	if err := st.Insert(plain); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := st.Prune(time.Now(), 180, 365, 365)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("pruned %d items, want 1", n)
+	}
+	if _, err := st.Get("fund1111"); err != nil {
+		t.Fatalf("fundamental item was pruned")
+	}
+	if _, err := st.Get("plai1111"); err != ErrNotFound {
+		t.Fatalf("stale item was not pruned")
+	}
+}
+
+// The stale window drops items that were used once but never recalled again.
+func TestPruneDropsStaleUsedItems(t *testing.T) {
+	st := newStore(t)
+	used := testItem("used1111")
+	used.UseCount = 3
+	used.CreatedAt = time.Now().AddDate(0, 0, -3000)
+	used.UpdatedAt = used.CreatedAt
+	used.LastUsed = used.CreatedAt
+	if err := st.Insert(used); err != nil {
+		t.Fatal(err)
+	}
+	n, err := st.Prune(time.Now(), 180, 365, 365)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("pruned %d items, want 1", n)
+	}
+	if _, err := st.Get("used1111"); err != ErrNotFound {
+		t.Fatal("stale used item was not pruned")
+	}
+}
+
+// A database created before the fundamental column exists must still open
+// and keep its rows.
+func TestOpenMigratesLegacyDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE items (
+	  id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
+	  body TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '', scope TEXT NOT NULL,
+	  source TEXT NOT NULL DEFAULT 'cli', status TEXT NOT NULL DEFAULT 'tentative',
+	  score REAL NOT NULL DEFAULT 0, use_count INTEGER NOT NULL DEFAULT 0,
+	  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, last_used INTEGER NOT NULL DEFAULT 0)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO items (id, kind, title, scope, created_at, updated_at, last_used)
+	  VALUES ('legacy01', 'fact', 'legacy item', 'project', 1, 1, 1)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	it, err := st.Get("legacy01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Title != "legacy item" {
+		t.Fatalf("legacy item mismatch: %+v", it)
+	}
+	if it.Fundamental {
+		t.Fatal("legacy item must not be fundamental")
 	}
 }
 

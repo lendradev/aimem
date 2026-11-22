@@ -35,18 +35,23 @@ func Tokens(s string) []string {
 
 // Similarity returns the Jaccard similarity of two texts, from 0 to 1.
 func Similarity(a, b string) float64 {
-	ta := Tokens(a)
-	tb := Tokens(b)
-	if len(ta) == 0 || len(tb) == 0 {
+	return SetSimilarity(TokenSet(a), TokenSet(b))
+}
+
+// TokenSet turns text into a set of unique tokens. Callers that compare many
+// pairs build the sets once instead of re-tokenizing the same text per pair.
+func TokenSet(s string) map[string]bool {
+	set := make(map[string]bool)
+	for _, t := range Tokens(s) {
+		set[t] = true
+	}
+	return set
+}
+
+// SetSimilarity is the Jaccard similarity of two token sets.
+func SetSimilarity(setA, setB map[string]bool) float64 {
+	if len(setA) == 0 || len(setB) == 0 {
 		return 0
-	}
-	setA := map[string]bool{}
-	for _, t := range ta {
-		setA[t] = true
-	}
-	setB := map[string]bool{}
-	for _, t := range tb {
-		setB[t] = true
 	}
 	inter := 0
 	for t := range setA {
@@ -64,22 +69,21 @@ func Similarity(a, b string) float64 {
 // Containment returns how much of the shorter text appears in the longer one.
 // It catches the case where a new item restates an old one with extra detail.
 func Containment(a, b string) float64 {
-	ta := Tokens(a)
-	tb := Tokens(b)
-	if len(ta) == 0 || len(tb) == 0 {
+	return SetContainment(TokenSet(a), TokenSet(b))
+}
+
+// SetContainment is the containment of two token sets.
+func SetContainment(setA, setB map[string]bool) float64 {
+	if len(setA) == 0 || len(setB) == 0 {
 		return 0
 	}
-	short, long := ta, tb
+	short, long := setA, setB
 	if len(long) < len(short) {
 		short, long = long, short
 	}
-	setLong := map[string]bool{}
-	for _, t := range long {
-		setLong[t] = true
-	}
 	hits := 0
-	for _, t := range short {
-		if setLong[t] {
+	for t := range short {
+		if long[t] {
 			hits++
 		}
 	}
@@ -89,5 +93,10 @@ func Containment(a, b string) float64 {
 // DuplicateScore combines similarity and containment into one number that
 // tells how likely two texts say the same thing.
 func DuplicateScore(a, b string) float64 {
-	return math.Max(Similarity(a, b), Containment(a, b)*0.9)
+	return SetDuplicateScore(TokenSet(a), TokenSet(b))
+}
+
+// SetDuplicateScore is DuplicateScore for pre-built token sets.
+func SetDuplicateScore(setA, setB map[string]bool) float64 {
+	return math.Max(SetSimilarity(setA, setB), SetContainment(setA, setB)*0.9)
 }

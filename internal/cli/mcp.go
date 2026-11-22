@@ -56,15 +56,16 @@ func runMCP(eng *engine.Engine) int {
 		},
 		{
 			Name:        "memory_remember",
-			Description: "Store one memory item. Use for durable facts, decisions, procedures, and preferences worth recalling in later sessions.",
+			Description: "Store one memory item. Use for durable facts, decisions, procedures, and preferences worth recalling in later sessions. Set fundamental for knowledge that stays valid across projects and years: prune never drops it.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title": map[string]any{"type": "string", "description": "One sentence, max 120 bytes."},
-					"body":  map[string]any{"type": "string", "description": "Optional detail, max 4 KB."},
-					"kind":  map[string]any{"type": "string", "enum": []string{"fact", "decision", "procedure", "preference", "lesson", "dead_end", "correction"}, "description": "Item type, default fact."},
-					"tags":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Up to 8 lowercase tags."},
-					"scope": map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Target scope, default project."},
+					"title":       map[string]any{"type": "string", "description": "One sentence, max 120 bytes."},
+					"body":        map[string]any{"type": "string", "description": "Optional detail, max 32 KB."},
+					"kind":        map[string]any{"type": "string", "enum": []string{"fact", "decision", "procedure", "preference", "lesson", "dead_end", "correction"}, "description": "Item type, default fact."},
+					"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Up to 8 lowercase tags."},
+					"scope":       map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Target scope, default project."},
+					"fundamental": map[string]any{"type": "boolean", "description": "Keep permanently. Prune never drops fundamental items, while non fundamental items become stale memory after years without recall."},
 				},
 				"required": []string{"title"},
 			},
@@ -177,11 +178,12 @@ func callTool(eng *engine.Engine, name string, args json.RawMessage) (any, error
 
 	case "memory_remember":
 		var a struct {
-			Title string   `json:"title"`
-			Body  string   `json:"body"`
-			Kind  string   `json:"kind"`
-			Tags  []string `json:"tags"`
-			Scope string   `json:"scope"`
+			Title       string   `json:"title"`
+			Body        string   `json:"body"`
+			Kind        string   `json:"kind"`
+			Tags        []string `json:"tags"`
+			Scope       string   `json:"scope"`
+			Fundamental bool     `json:"fundamental"`
 		}
 		if err := json.Unmarshal(args, &a); err != nil {
 			return nil, err
@@ -195,7 +197,8 @@ func callTool(eng *engine.Engine, name string, args json.RawMessage) (any, error
 			scope = memory.ScopeProject
 		}
 		res, err := eng.Remember(engine.RememberOptions{
-			Scope: scope, Kind: kind, Title: a.Title, Body: a.Body, Tags: a.Tags, Source: "mcp",
+			Scope: scope, Kind: kind, Title: a.Title, Body: a.Body, Tags: a.Tags,
+			Source: "mcp", Fundamental: a.Fundamental,
 		})
 		if err != nil {
 			return nil, err

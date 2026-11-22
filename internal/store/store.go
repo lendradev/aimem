@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS items (
   use_count   INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL,
-  last_used   INTEGER NOT NULL DEFAULT 0
+  last_used   INTEGER NOT NULL DEFAULT 0,
+  fundamental INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS signals (
@@ -115,11 +116,58 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate schema: %w", err)
+	}
 	if _, err := db.Exec(`PRAGMA synchronous=NORMAL`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("set synchronous: %w", err)
 	}
 	return &Store{db: db, path: path}, nil
+}
+
+// migrate adds columns that older database files do not have yet. SQLite has
+// no "ADD COLUMN IF NOT EXISTS", so the column list is checked first.
+func migrate(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(items)`)
+	if err != nil {
+		return err
+	}
+	hasFundamental := false
+	for rows.Next() {
+		var (
+			cid        int
+			name, typ  string
+			notNull    int
+			dflt       sql.NullString
+			primaryKey int
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "fundamental" {
+			hasFundamental = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	if hasFundamental {
+		return nil
+	}
+	_, err = db.Exec(`ALTER TABLE items ADD COLUMN fundamental INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // Compact reclaims free pages in the database file.
@@ -131,15 +179,33 @@ func (s *Store) Compact() error {
 // Prune drops items that have not been used within the given window and
 // signals older than the signal window. It keeps the database small without
 // touching items that are still in play.
-func (s *Store) Prune(now time.Time, itemIdleDays, signalDays int) (int, error) {
+//
+// Fundamental items are never dropped: they hold knowledge that stays valid
+// across projects and years, so aging them out would lose permanent context.
+//
+// A stale window handles the rest. Items that are no longer fundamental and
+// have not been recalled for that long are dropped even when they were used
+// once, because a fact nobody looked up for years is no longer worth its
+// storage.
+func (s *Store) Prune(now time.Time, itemIdleDays, signalDays, staleDays int) (int, error) {
 	itemCutoff := now.AddDate(0, 0, -itemIdleDays).Unix()
 	signalCutoff := now.AddDate(0, 0, -signalDays).Unix()
 
-	res, err := s.db.Exec(`DELETE FROM items WHERE use_count = 0 AND last_used < ?`, itemCutoff)
+	res, err := s.db.Exec(`DELETE FROM items WHERE fundamental = 0 AND use_count = 0 AND last_used <= ?`, itemCutoff)
 	if err != nil {
 		return 0, err
 	}
 	items, _ := res.RowsAffected()
+
+	if staleDays >= 0 {
+		staleCutoff := now.AddDate(0, 0, -staleDays).Unix()
+		res, err := s.db.Exec(`DELETE FROM items WHERE fundamental = 0 AND last_used <= ?`, staleCutoff)
+		if err != nil {
+			return int(items), err
+		}
+		n, _ := res.RowsAffected()
+		items += n
+	}
 
 	if _, err := s.db.Exec(`DELETE FROM signals WHERE at < ?`, signalCutoff); err != nil {
 		return int(items), err
@@ -172,19 +238,20 @@ var ErrNotFound = errors.New("item not found")
 
 func (s *Store) Insert(it memory.Item) error {
 	_, err := s.db.Exec(
-		`INSERT INTO items (id, kind, title, body, tags, scope, source, status, score, use_count, created_at, updated_at, last_used)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO items (id, kind, title, body, tags, scope, source, status, score, use_count, created_at, updated_at, last_used, fundamental)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		it.ID, string(it.Kind), it.Title, it.Body, strings.Join(it.Tags, " "), it.Scope, it.Source,
 		string(it.Status), it.Score, it.UseCount, it.CreatedAt.Unix(), it.UpdatedAt.Unix(), it.LastUsed.Unix(),
+		boolToInt(it.Fundamental),
 	)
 	return err
 }
 
 func (s *Store) Update(it memory.Item) error {
 	res, err := s.db.Exec(
-		`UPDATE items SET kind=?, title=?, body=?, tags=?, status=?, score=?, updated_at=?, last_used=? WHERE id=?`,
+		`UPDATE items SET kind=?, title=?, body=?, tags=?, status=?, score=?, updated_at=?, last_used=?, fundamental=? WHERE id=?`,
 		string(it.Kind), it.Title, it.Body, strings.Join(it.Tags, " "), string(it.Status), it.Score,
-		it.UpdatedAt.Unix(), it.LastUsed.Unix(), it.ID,
+		it.UpdatedAt.Unix(), it.LastUsed.Unix(), boolToInt(it.Fundamental), it.ID,
 	)
 	if err != nil {
 		return err
@@ -196,7 +263,7 @@ func (s *Store) Update(it memory.Item) error {
 }
 
 func (s *Store) Get(id string) (memory.Item, error) {
-	row := s.db.QueryRow(`SELECT id, kind, title, body, tags, scope, source, status, score, use_count, created_at, updated_at, last_used FROM items WHERE id=?`, id)
+	row := s.db.QueryRow(`SELECT id, kind, title, body, tags, scope, source, status, score, use_count, created_at, updated_at, last_used, fundamental FROM items WHERE id=?`, id)
 	it, err := scanItem(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return memory.Item{}, ErrNotFound
@@ -216,7 +283,7 @@ func (s *Store) Delete(id string) error {
 }
 
 func (s *Store) List(scope string) ([]memory.Item, error) {
-	rows, err := s.db.Query(`SELECT id, kind, title, body, tags, scope, source, status, score, use_count, created_at, updated_at, last_used FROM items WHERE scope=? ORDER BY score DESC, updated_at DESC`, scope)
+	rows, err := s.db.Query(`SELECT id, kind, title, body, tags, scope, source, status, score, use_count, created_at, updated_at, last_used, fundamental FROM items WHERE scope=? ORDER BY score DESC, updated_at DESC`, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -380,14 +447,16 @@ func scanItem(row rowScanner) (memory.Item, error) {
 		created  int64
 		updated  int64
 		lastUsed int64
+		fund     int
 	)
 	if err := row.Scan(&it.ID, &kind, &it.Title, &it.Body, &tags, &scope, &it.Source, &status,
-		&it.Score, &it.UseCount, &created, &updated, &lastUsed); err != nil {
+		&it.Score, &it.UseCount, &created, &updated, &lastUsed, &fund); err != nil {
 		return memory.Item{}, err
 	}
 	it.Kind = memory.Kind(kind)
 	it.Scope = scope
 	it.Status = memory.Status(status)
+	it.Fundamental = fund != 0
 	it.CreatedAt = time.Unix(created, 0).UTC()
 	it.UpdatedAt = time.Unix(updated, 0).UTC()
 	it.LastUsed = time.Unix(lastUsed, 0).UTC()

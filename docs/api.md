@@ -34,10 +34,11 @@ Nama binary bisa `aimem`, `ai-memory`, `aimemory`, `ai-memory-cli`, atau `aimem-
 | Perintah | Flag | Default | Perilaku |
 |---|---|---|---|
 | `remember` | `--kind` | `fact` | `fact`, `decision`, `procedure`, `preference`, `lesson`, `dead_end`, `correction` |
-| | `--body` | kosong | detail, maksimal 4096 byte |
+| | `--body` | kosong | detail, maksimal 32768 byte |
 | | `--scope` | `project` | `project` atau `global` |
 | | `--tag` | kosong | repeatable, maksimal 8 tag, lowercase |
 | | `--allow-duplicate` | false | simpan walau ada item yang mirip |
+| | `--fundamental` | false | tandai sebagai ilmu fundamental, prune tidak pernah membuangnya |
 | `recall` | `--scope` | `all` | `all`, `project`, `global` |
 | | `--limit` | `5` | jumlah item maksimum |
 | | `--tokens` | `600` | budget token perkiraan |
@@ -52,6 +53,7 @@ Nama binary bisa `aimem`, `ai-memory`, `aimemory`, `ai-memory-cli`, atau `aimem-
 | `stats` | `--scope` | `all` | scope yang dihitung |
 | `prune` | `--idle-days` | `180` | item tak terpakai lebih lama dari ini dibuang |
 | | `--signal-days` | `365` | signal lebih lama dari ini dibuang |
+| | `--stale-days` | `1825` | item non fundamental yang tidak dipanggil lagi selama ini dibuang |
 
 Flag boleh muncul sebelum atau sesudah argumen posisional. `aimem remember judul --kind fact` dan `aimem remember --kind fact judul` setara.
 
@@ -60,7 +62,7 @@ Flag boleh muncul sebelum atau sesudah argumen posisional. `aimem remember judul
 | Batas | Nilai |
 |---|---|
 | Panjang judul | 120 byte |
-| Panjang body | 4096 byte |
+| Panjang body | 32768 byte |
 | Jumlah tag | 8 |
 | Panjang ID | 8 karakter |
 | Similarity duplikat | 0,75 |
@@ -154,6 +156,7 @@ Output: `content` dengan satu blok `text`. Format tiap baris:
 | `kind` | salah satu dari 7 jenis | `fact` |
 | `tags` | array string | kosong |
 | `scope` | `project` \| `global` | `project` |
+| `fundamental` | bool | `false` |
 
 Output: `saved <id> (<kind>, scope <scope>)`.
 
@@ -182,7 +185,7 @@ Output: `<id> -> status <status>, score <score>`.
 | `id` | string | 8 karakter, stable |
 | `kind` | Kind | jenis item |
 | `title` | string | satu kalimat, wajib, maks 120 byte |
-| `body` | string | detail, maks 4 KB |
+| `body` | string | detail, maks 32 KB |
 | `tags` | []string | lowercase, maks 8 |
 | `scope` | `global` \| `project` | scope penyimpanan |
 | `source` | string | `cli`, `mcp`, atau asal lain |
@@ -190,6 +193,7 @@ Output: `<id> -> status <status>, score <score>`.
 | `score` | float | signed usefulness score, time-decayed |
 | `use_count` | int | kali dipanggil |
 | `created_at`, `updated_at`, `last_used` | time | unix seconds |
+| `fundamental` | bool | ilmu yang berlaku lintas project dan lintas tahun, prune tidak pernah membuangnya |
 
 ### Status
 
@@ -262,12 +266,18 @@ Batas yang membatasi pertumbuhan:
 
 | Batas | Nilai |
 |---|---|
-| Body per item | 4096 byte |
+| Body per item | 32768 byte |
 | Judul per item | 120 byte |
 | Tag per item | 8 |
 | Item tak terpakai | dibuang `aimem prune` setelah 180 hari |
+| Item non fundamental yang tidak dipanggil lagi | dibuang `aimem prune` setelah 1825 hari (lima tahun) |
 | Signal lama | dibuang `aimem prune` setelah 365 hari |
 | Ruam kosong | dikembalikan `auto_vacuum=INCREMENTAL` + `PRAGMA incremental_vacuum` |
+| Item fundamental | tidak pernah dibuang prune, berapa pun umurnya |
 | Item yang dipakai | `use_count` naik, `last_used` diperbarui, jadi prune tidak menyentuh yang aktif |
 
-Item yang dihapus diprune berdasarkan `use_count = 0`, jadi item yang pernah dipakai recall tidak hilang hanya karena tidak dipakai dalam 180 hari. Ini kompromi yang disengaja: storage dijaga, tapi item aktif tidak hilang.
+Item yang dihapus diprune berdasarkan `use_count = 0`, jadi item yang pernah dipakai recall tidak hilang hanya karena tidak dipakai dalam 180 hari. Setelah 1825 hari tanpa dipanggil, item non fundamental ikut dibuang: kalau tidak pernah dibutuhkan lagi, storage-nya tidak layak. Item fundamental dikecualikan dari dua aturan ini, jadi ilmu yang berlaku lintas project dan lintas tahun tetap tersimpan.
+
+Body 32 KB dilimitasi supaya satu item tidak bisa memakan seluruh storage. Biaya riilnya tetap di body yang benar-benar panjang: database 200 item dengan body ~200 byte tetap sekitar 504 KB. Body besar juga dipotong saat recall agar budget token tidak blown: bagian yang muat dalam budget dikembalikan, sisanya ditandai `truncated`.
+
+Skema database punya kolom `fundamental`. Database lama tanpa kolom itu dimigrasi otomatis saat binary dibuka: kolom ditambahkan dengan nilai default 0, jadi data yang sudah ada tetap utuh.

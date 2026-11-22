@@ -26,7 +26,9 @@ Pasang binary di [install.md](install.md), lalu hubungkan ke AI agent di [agents
 
 ## Model ringkas
 
-Memory item punya satu jenis (`fact`, `decision`, `procedure`, `preference`, `lesson`, `dead_end`, `correction`), judul satu kalimat, body sampai 4 KB, dan tag lowercase. Setiap item berada di satu scope: project (`<project-root>/.aimem/`) atau global (`~/.aimem/`).
+Memory item punya satu jenis (`fact`, `decision`, `procedure`, `preference`, `lesson`, `dead_end`, `correction`), judul satu kalimat, body sampai 32 KB, dan tag lowercase. Setiap item berada di satu scope: project (`<project-root>/.aimem/`) atau global (`~/.aimem/`).
+
+Item fundamental adalah ilmu yang berlaku lintas project dan lintas tahun. Item ini ditandai saat disimpan (`--fundamental` atau `fundamental: true`) dan tidak pernah dibuang prune. Item lain adalah memory biasa: kalau tidak pernah dipanggil ulang dalam lima tahun, prune anggap stale dan buang.
 
 Recall menggabungkan lexical match (FTS5 dengan porter stemming) dengan skor outcome. Item yang diberi `useful` naik skor dan	statusnya jadi `preferred` setelah dikonfirmasi dua sumber. Item `dead_end` dan `corrected` disembunyikan dari recall default.
 
