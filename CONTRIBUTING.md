@@ -89,6 +89,15 @@ fix: escape quotes in FTS5 query terms
 docs: document the MCP tool schemas
 ```
 
+## Releasing
+
+The release workflow owns both the tag and the GitHub release.
+
+1. Bump `versionNumber` in `internal/cli/cli.go` to the next semver version. A breaking change to the CLI, the MCP schema, or the database layout bumps the major version. A new flag or a new column bumps the minor version. A fix bumps the patch version.
+2. Merge that change to `main`. The workflow reads the version from the code, publishes the tag `v<version>`, and creates the release with the binaries for every platform.
+
+A tag pushed by hand must match the version in the code, otherwise the workflow stops. Re-running the workflow for a version that already has a release refreshes the assets instead of failing.
+
 ## Reporting bugs
 
 This project is built with AI assistance, so it has not had the kind of human audit a mature project would have. Bug reports are genuinely valuable here.

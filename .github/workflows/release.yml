@@ -1,22 +1,32 @@
 name: release
 
+# The release tag and the GitHub release are owned by this workflow. The
+# version comes from internal/cli/cli.go, so a version bump in a pull request
+# is enough to publish a release once the change lands on main.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to publish, for example v0.1.0
-        required: true
+        description: Tag to publish, for example v0.2.0. Empty means use the version from the code.
+        required: false
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -24,17 +34,68 @@ jobs:
           cache: true
 
       - name: resolve tag
+        id: resolve
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "TAG=${{ inputs.tag }}" >> "$GITHUB_ENV"
-          else
-            echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_ENV"
+          set -euo pipefail
+          version=$(sed -n 's/^const versionNumber = "\(.*\)"$/\1/p' internal/cli/cli.go)
+          if [ -z "$version" ]; then
+            echo "could not read versionNumber from internal/cli/cli.go" >&2
+            exit 1
+          fi
+          if ! echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "version $version is not a valid semver version" >&2
+            exit 1
           fi
 
+          tag=""
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_TAG" ]; then
+            tag="$DISPATCH_TAG"
+          elif [ "$EVENT_NAME" = "push" ] && [ "${REF_NAME#v}" != "$REF_NAME" ]; then
+            tag="$REF_NAME"
+          else
+            tag="v$version"
+          fi
+          if [ "${tag#v}" != "$version" ]; then
+            echo "tag $tag does not match the version in internal/cli/cli.go ($version)" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: check release state
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [ "$EVENT_NAME" = "push" ] && [ "${REF_NAME#v}" = "$REF_NAME" ]; then
+              # A plain push to main re-runs the same version, so the release
+              # already published for it does not need new assets.
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "release $TAG already exists, nothing to publish"
+              exit 0
+            fi
+            # A tag push can point at new code, so the assets are refreshed.
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "release $TAG exists, refreshing its assets"
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "release $TAG does not exist yet"
+
       - name: build binaries
+        if: steps.state.outputs.publish == 'true'
         env:
           CGO_ENABLED: "0"
         run: |
+          set -euo pipefail
           mkdir -p dist
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             goos="${target%/*}"
@@ -46,16 +107,44 @@ jobs:
           done
 
       - name: checksums
+        if: steps.state.outputs.publish == 'true'
         run: |
+          set -euo pipefail
           cd dist
           sha256sum aimem_* > SHA256SUMS
           cat SHA256SUMS
 
       - name: publish release
+        if: steps.state.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.resolve.outputs.tag }}
         run: |
-          gh release create "$TAG" \
-            --title "aimem $TAG" \
-            --notes "Memory for AI agents. See the README for install and usage instructions." \
-            dist/aimem_* dist/SHA256SUMS
+          set -euo pipefail
+          git fetch --tags --force --quiet || true
+          notes=$(mktemp)
+          {
+            echo "Memory for AI agents. See the README for install and usage instructions."
+            echo
+            previous=$(gh release list --limit 100 --json tagName --jq '[.[] | select(.tagName != env.TAG)][0].tagName // ""')
+            if [ -n "$previous" ] && git rev-parse -q --verify "refs/tags/$previous" >/dev/null; then
+              echo "Changes since $previous:"
+              echo
+              git log --no-merges --pretty=format:'- %s (%h)' "$previous..${GITHUB_SHA}"
+              echo
+            fi
+          } > "$notes"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Refresh the notes and replace the assets of an existing release
+            # instead of failing on a duplicate release.
+            gh release edit "$TAG" --title "aimem $TAG" --notes-file "$notes"
+            gh release upload "$TAG" dist/aimem_* dist/SHA256SUMS --clobber
+          else
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "aimem $TAG" \
+              --notes-file "$notes" \
+              dist/aimem_* dist/SHA256SUMS
+          fi
+          rm -f "$notes"

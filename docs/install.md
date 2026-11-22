@@ -271,7 +271,7 @@ Kalau Go tidak ada tapi Docker ada, `scripts/go.sh` otomatis memakai container `
 Cek cepat:
 
 ```bash
-aimem remember "install aimem berhasil" --kind fact --body "Binary v0.1.0 di PATH." --tag setup
+aimem remember "install aimem berhasil" --kind fact --body "Binary v0.2.0 di PATH." --tag setup
 aimem recall "install"
 ```
 
