@@ -27,6 +27,14 @@ cd aimem
 
 `scripts/go.sh` runs `go` natively when it is on `PATH`, and in a container otherwise. It accepts any `go` subcommand, so `./scripts/go.sh fmt ./...` works too.
 
+The container reuses a module cache and build cache between runs, so dependencies are downloaded only once. The cache lives next to the other user caches by default. Point it somewhere else with `AIMEM_GO_CACHE`:
+
+```bash
+AIMEM_GO_CACHE=/mnt/data/aimem-go ./scripts/go.sh build ./...
+```
+
+When `/mnt/workstation` exists and is writable, `scripts/go.sh` uses `/mnt/workstation/.cache/aimem-go` automatically, so the Go toolchain does not write to the internal disk. `AIMEM_GO_CACHE` overrides that. The cache only affects building. The released binary is statically linked and needs neither the cache nor a Go toolchain to run.
+
 ## Code layout
 
 ```

@@ -49,18 +49,27 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 case "$(uname -s)" in
-  Darwin) CACHE_ROOT="${AIMEM_GO_CACHE:-$HOME/Library/Caches/aimem-go}" ;;
-  *)      CACHE_ROOT="${AIMEM_GO_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/aimem-go}" ;;
+  Darwin) DEFAULT_CACHE_ROOT="$HOME/Library/Caches/aimem-go" ;;
+  *)      DEFAULT_CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/aimem-go" ;;
 esac
 
-mkdir -p "$CACHE_ROOT/pkg/mod" "$CACHE_ROOT/cache/go-build" "$CACHE_ROOT/tmp"
+# On this machine the build cache lives on the external volume so the Go
+# toolchain does not write to the internal SSD. AIMEM_GO_CACHE still wins for
+# anyone who wants a different location.
+if [ -d /mnt/workstation ] && [ -w /mnt/workstation ]; then
+  DEFAULT_CACHE_ROOT="/mnt/workstation/.cache/aimem-go"
+fi
+
+CACHE_ROOT="${AIMEM_GO_CACHE:-$DEFAULT_CACHE_ROOT}"
+
+mkdir -p "$CACHE_ROOT/pkg/mod" "$CACHE_ROOT/pkg/sumdb" "$CACHE_ROOT/cache/go-build" "$CACHE_ROOT/tmp"
 
 docker run --rm --name sbx-aimem-go \
   --user "$(id -u):$(id -g)" \
   --cap-drop=ALL --security-opt no-new-privileges --read-only \
   --memory 2g --cpus 2 --pids-limit 256 \
   --tmpfs /tmp:rw,exec,nosuid,nodev,size=512m,mode=1777 \
-  --mount "type=bind,source=$CACHE_ROOT/pkg/mod,target=/go/pkg/mod" \
+  --mount "type=bind,source=$CACHE_ROOT/pkg,target=/go/pkg" \
   --mount "type=bind,source=$CACHE_ROOT/cache/go-build,target=/go/.cache/go-build" \
   --mount "type=bind,source=$CACHE_ROOT/tmp,target=/gotmp" \
   -e HOME=/tmp -e GOPATH=/go -e GOMODCACHE=/go/pkg/mod -e GOCACHE=/go/.cache/go-build \

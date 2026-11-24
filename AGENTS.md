@@ -73,6 +73,7 @@ Urutan prioritas kalau skill berbeda pendapat: instruksi user â†’ `AGENTS.md` â†
 Perintah lain yang berlaku:
 
 - `scripts/go.sh` menjalankan `go` native kalau Go ada di `PATH`, dan di container Docker kalau tidak. Cache toolchain dipakai ulang antar run.
+- Cache build ada di `/mnt/workstation/.cache/aimem-go` kalau `/mnt/workstation` ada dan writable, supaya Go tidak menulis ke SSD internal. Override dengan `AIMEM_GO_CACHE=/path/lain`. Cache hanya dipakai untuk build; binary `aimem` static dan tidak butuh cache atau Go toolchain untuk jalan.
   ```bash
   ./scripts/go.sh build ./...
   ./scripts/go.sh test ./...
