@@ -234,7 +234,7 @@ Keduanya external-content (`content='items'`) dengan tiga trigger sinkron insert
 
 `items_tri` ada karena FTS5 berbasis token butuh kecocokan token utuh, jadi query prefix seperti `pool` tidak menemukan `pooling`. Trigram menutup celah itu tanpa menambah dependency.
 
-`embeddings` sengaja dibuat lebih awal dan default kosong, supaya pivot ke retrieval semantic tidak butuh migrasi tabel `items`.
+`embeddings` sengaja dibuat lebih awal dan default kosong. Percakapan internal 2026-11-24 memutuskan aimem tetap memakai retrieval lexical tanpa model embedding, jadi tabel ini tidak pernah diisi. Tabelnya dipertahankan supaya skema tidak perlu migrasi kalau keputusannya berubah.
 
 ## Mekanisme belajar
 
@@ -255,7 +255,7 @@ Query user tidak pernah masuk `MATCH` sebagai string mentah. Pipeline: normalisa
 
 Alasannya: query mentah seperti `go-build`, `a:b`, atau `(cache` memicu SQL error di parser FTS5. Sudah diverifikasi lewat spike FTS5 pure-Go.
 
-Query natural language yang tidak berbagi token utuh dengan isi memory (mis. "bahasa apa yang dipakai" untuk memory yang berisi "dibangun dengan Go") **tidak** ditemukan oleh retrieval lexical. Ini batas yang diketahui, bukan bug. Solusinya fase semantic (isi tabel `embeddings`), bukan sekarang.
+Query natural language yang tidak berbagi token utuh dengan isi memory (mis. "bahasa apa yang dipakai" untuk memory yang berisi "dibangun dengan Go") **tidak** ditemukan oleh retrieval lexical. Ini batas yang diketahui dan disepakati, bukan bug: aimem memakai retrieval lexical saja, tanpa model embedding. Praktisnya, tulis query dengan kata kunci yang ada di body item, dalam bahasa Inggris.
 
 ## Biaya storage dan token
 

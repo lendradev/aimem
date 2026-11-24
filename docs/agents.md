@@ -421,6 +421,10 @@ Rules:
   code comments, and your replies to the user may be English or Indonesian.
   Items already stored in another language do not need a backfill, but every
   new or rewritten item must be English.
+- Write recall queries in English too, using keywords that appear in the item
+  body. Retrieval is lexical, so a paraphrase in another language does not
+  match. "how to commit with the right message format" finds an item about
+  commit message conventions; "cara commit yang benar" does not.
 - Decide before you store. If the fact is fundamental knowledge that stays
   true across projects and years (the language the project uses, a rule the
   team never breaks, a physical constant), store it with `fundamental: true`.

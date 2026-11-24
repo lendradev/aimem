@@ -237,13 +237,13 @@ This project was inspired by [Graphify-Labs/graphify](https://github.com/Graphif
 
 - Graph traversal over a code index costs far more tokens than "what did I decide about this repo".
 - `aimem` stores *experience* (facts, decisions, procedures, dead ends), not *code structure*.
-- Retrieval is lexical by default and stays deterministic. No LLM calls, no embedding service.
+- Retrieval is lexical by default and stays deterministic. No LLM calls, no embedding service, no local model to download.
 
 Everything runs on-device. Nothing is uploaded, and there is no telemetry.
 
 ## Known limits
 
-- **Lexical retrieval.** A natural-language query that shares no word or substring with the stored text is not found. Paraphrase matching needs semantic retrieval, which is on the roadmap but not implemented.
+- **Lexical retrieval.** A natural-language query that shares no word or substring with the stored text is not found. This is a deliberate trade: semantic retrieval needs a local embedding model (88 MB on disk, 200 MB+ of RAM in the `aimem` process), and `aimem` stays a single static binary with no model to download. Write queries with the keywords that appear in the item body.
 - **No stemming for non-English.** The porter stemmer is English. Indonesian and other languages match on whole words, which works but misses derivational variants.
 - **No word segmentation for CJK or Thai.** A run of characters is one term, so a query must match the whole run. A dictionary-based segmenter would fix this for Chinese and Japanese.
 - **Duplicate detection is lexical.** Two items that say the same thing in different words are not detected as duplicates. The check uses token overlap, not meaning.
