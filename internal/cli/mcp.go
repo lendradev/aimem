@@ -56,12 +56,12 @@ func runMCP(eng *engine.Engine) int {
 		},
 		{
 			Name:        "memory_remember",
-			Description: "Store one memory item. Use for durable facts, decisions, procedures, and preferences worth recalling in later sessions. Set fundamental for knowledge that stays valid across projects and years: prune never drops it.",
+			Description: "Store one memory item. Use for durable facts, decisions, procedures, and preferences worth recalling in later sessions. Write the title and the body in English; keep technical terms, file names, error messages, and shell commands exactly as they are. Set fundamental for knowledge that stays valid across projects and years: prune never drops it.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title":       map[string]any{"type": "string", "description": "One sentence, max 120 bytes."},
-					"body":        map[string]any{"type": "string", "description": "Optional detail, max 32 KB."},
+					"title":       map[string]any{"type": "string", "description": "One sentence in English, max 120 bytes."},
+					"body":        map[string]any{"type": "string", "description": "Optional detail in English, max 32 KB."},
 					"kind":        map[string]any{"type": "string", "enum": []string{"fact", "decision", "procedure", "preference", "lesson", "dead_end", "correction"}, "description": "Item type, default fact."},
 					"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Up to 8 lowercase tags."},
 					"scope":       map[string]any{"type": "string", "enum": []string{"project", "global"}, "description": "Target scope, default project."},

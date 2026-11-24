@@ -68,6 +68,9 @@ Flag boleh muncul sebelum atau sesudah argumen posisional. `aimem remember judul
 | Jumlah tag | 8 |
 | Panjang ID | 8 karakter |
 | Similarity duplikat | 0,75 |
+| Bahasa isi item | English (title dan body), istilah teknis tetap apa adanya |
+
+Bahasa item aimem dibatasi English supaya retrieval lintas project konsisten: dedupe dan FTS5 berbasis token, jadi satu bahasa membuat item yang sama mudah dikenali. Dokumentasi repo, README, komentar kode, dan output CLI ke user boleh English atau Bahasa Indonesia.
 
 ### Environment
 

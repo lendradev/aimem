@@ -19,14 +19,14 @@ The usual fix is to dump the session transcript into a file and paste it into th
 ## What it looks like
 
 ```console
-$ aimem remember "pakai Go bukan Rust" --kind decision \
-    --body "Keputusan user 2026-11-21. Binary static, tanpa cgo." \
-    --tag keputusan --tag stack
+$ aimem remember "use Go instead of Rust" --kind decision \
+    --body "User decision 2026-11-21. Static binary, no cgo." \
+    --tag stack --tag decision
 saved FRA3HIFL (decision, scope project)
 
-$ aimem recall "bahasa"
-- [decision] pakai Go bukan Rust (id FRA3HIFL, score 1.25, scope project)
-  Keputusan user 2026-11-21. Binary static, tanpa cgo.
+$ aimem recall "language"
+- [decision] use Go instead of Rust (id FRA3HIFL, score 1.25, scope project)
+  User decision 2026-11-21. Static binary, no cgo.
 
 $ aimem feedback FRA3HIFL useful --source session-2
 FRA3HIFL -> status preferred, score 2.0000

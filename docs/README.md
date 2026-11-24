@@ -30,6 +30,9 @@ Memory item punya satu jenis (`fact`, `decision`, `procedure`, `preference`, `le
 
 Item fundamental adalah ilmu yang berlaku lintas project dan lintas tahun. Item ini ditandai saat disimpan (`--fundamental` atau `fundamental: true`) dan tidak pernah dibuang prune. Item lain adalah memory biasa: kalau tidak pernah dipanggil ulang dalam lima tahun, prune anggap stale dan buang.
 
-Recall menggabungkan lexical match (FTS5 dengan porter stemming) dengan skor outcome. Item yang diberi `useful` naik skor dan	statusnya jadi `preferred` setelah dikonfirmasi dua sumber. Item `dead_end` dan `corrected` disembunyikan dari recall default.
+Recall menggabungkan lexical match (FTS5 dengan porter stemming) dengan skor outcome. Item yang diberi `useful` naik skor dan statusnya jadi `preferred` setelah dikonfirmasi dua sumber. Item `dead_end` dan `corrected` disembunyikan dari recall default.
+
+Isi item aimem ditulis dalam English (judul dan body), istilah teknis tetap apa adanya. Dokumentasi repo, README, komentar kode, dan output CLI ke user boleh English atau Bahasa Indonesia.
+
 
 Detail lengkap ada di [api.md](api.md).

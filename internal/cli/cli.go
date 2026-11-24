@@ -183,7 +183,7 @@ func Run(args []string) int {
 	return 0
 }
 
-const versionNumber = "0.3.0"
+const versionNumber = "0.3.1"
 
 func usage() {
 	name := currentAlias()

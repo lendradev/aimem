@@ -415,6 +415,12 @@ Rules:
   preferences, dead ends, and corrections. One fact per item. Title is one
   sentence, max 120 bytes. Body holds the detail, max 32 KB. Add 2 to 5
   lowercase tags.
+- Write every stored item in English, title and body, without exception.
+  Technical terms, file names, error messages, and shell commands stay
+  exactly as they are. Only the memory store is English-only: docs, README,
+  code comments, and your replies to the user may be English or Indonesian.
+  Items already stored in another language do not need a backfill, but every
+  new or rewritten item must be English.
 - Decide before you store. If the fact is fundamental knowledge that stays
   true across projects and years (the language the project uses, a rule the
   team never breaks, a physical constant), store it with `fundamental: true`.
