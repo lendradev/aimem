@@ -675,6 +675,14 @@ func (e *Engine) Recall(opts RecallOptions) ([]RecallResult, error) {
 
 	results := []RecallResult{}
 	used := 0
+	// A single large item must not spend the whole budget: the agent would
+	// get one item and never see the other candidates. Every item gets at
+	// most a quarter of the budget for its body, so several items fit and
+	// the full text stays reachable through `aimem show`.
+	perItemBody := opts.TokenBudget / 4
+	if perItemBody < 16 {
+		perItemBody = 16
+	}
 	for _, c := range ranked {
 		if len(results) >= opts.Limit {
 			break
@@ -686,13 +694,17 @@ func (e *Engine) Recall(opts RecallOptions) ([]RecallResult, error) {
 		truncated := false
 		if !opts.Full {
 			titleCost := EstimateTokens(c.item.Title)
-			cost := titleCost + EstimateTokens(body)
-			if used+cost > opts.TokenBudget && len(results) > 0 {
-				break
+			if EstimateTokens(body) > perItemBody {
+				body = truncateToTokens(body, perItemBody)
+				truncated = true
 			}
+			cost := titleCost + EstimateTokens(body)
 			if used+cost > opts.TokenBudget {
-				// Keep as much of the body as the budget allows instead of
-				// dropping it, so a large item still carries usable detail.
+				if len(results) > 0 {
+					break
+				}
+				// Nothing returned yet, so this item still gets whatever is
+				// left of the budget instead of being dropped.
 				remaining := opts.TokenBudget - used - titleCost
 				if remaining <= 0 {
 					body = ""
@@ -700,6 +712,7 @@ func (e *Engine) Recall(opts RecallOptions) ([]RecallResult, error) {
 					body = truncateToTokens(body, remaining)
 				}
 				truncated = true
+				cost = titleCost + EstimateTokens(body)
 			}
 		}
 		used += EstimateTokens(c.item.Title) + EstimateTokens(body)

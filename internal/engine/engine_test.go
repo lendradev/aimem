@@ -277,6 +277,31 @@ func TestRecallRespectsTokenBudget(t *testing.T) {
 	}
 }
 
+// A single huge item must not spend the whole token budget: the agent would
+// receive one result and never see the other candidates.
+func TestRecallKeepsMultipleResultsWithOneHugeBody(t *testing.T) {
+	eng := newTestEngine(t)
+	remember(t, eng, memory.ScopeProject, "fact", "huge sandbox policy item",
+		strings.Repeat("sandbox policy detail ", 1400), nil)
+	for i, word := range []string{"alpha", "bravo", "charlie"} {
+		remember(t, eng, memory.ScopeProject, "fact", "sandbox policy "+word+" item",
+			"sandbox policy "+word+" "+strings.Repeat(word+" ", 40), nil)
+		_ = i
+	}
+	res, err := eng.Recall(RecallOptions{Query: "sandbox policy", Limit: 5, TokenBudget: 600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) < 4 {
+		t.Fatalf("one huge body crowded out the other results: got %d", len(res))
+	}
+	for _, r := range res {
+		if EstimateTokens(r.Body)+EstimateTokens(r.Title) > 600 {
+			t.Fatalf("result exceeded the budget: %d tokens", EstimateTokens(r.Body))
+		}
+	}
+}
+
 // A body larger than the token budget must still come back partially, so a big
 // memory item stays useful without blowing the budget.
 func TestRecallKeepsPartialBodyWithinBudget(t *testing.T) {

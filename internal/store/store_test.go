@@ -73,6 +73,34 @@ func TestSearchIndexesItems(t *testing.T) {
 	}
 }
 
+// A title match must outrank a body match, because the title states what the
+// item is about while the body only mentions the term somewhere.
+func TestSearchRanksTitleAboveBody(t *testing.T) {
+	st := newStore(t)
+	titleItem := testItem("titl0001")
+	titleItem.Title = "storage write policy"
+	titleItem.Body = "short note"
+	if err := st.Insert(titleItem); err != nil {
+		t.Fatal(err)
+	}
+	bodyItem := testItem("body00001")
+	bodyItem.Title = "unrelated heading"
+	bodyItem.Body = "this body mentions storage write policy once in passing"
+	if err := st.Insert(bodyItem); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := st.Search(`"storage" OR "write" OR "policy"`, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 2 {
+		t.Fatalf("got %d hits, want 2: %+v", len(hits), hits)
+	}
+	if hits[0].ID != "titl0001" {
+		t.Fatalf("body match outranked the title match: %+v", hits)
+	}
+}
+
 func TestSearchSurvivesUpdate(t *testing.T) {
 	st := newStore(t)
 	it := testItem("bbb22222")

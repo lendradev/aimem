@@ -356,15 +356,27 @@ func (s *Store) AllSignals() ([]memory.Signal, error) {
 	return out, rows.Err()
 }
 
+// Search column weights for bm25. A title match is a stronger signal than a
+// body match: the title states what the item is about, while the body only
+// mentions it somewhere. Tags are weighted between the two, because they are
+// chosen by the writer but are shorter than a title.
+const (
+	titleWeight = 5.0
+	bodyWeight  = 1.0
+	tagsWeight  = 3.0
+)
+
 // Search runs a lexical FTS5 query and returns candidate ids with bm25 ranks.
 func (s *Store) Search(match string, limit int) ([]SearchHit, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	rows, err := s.db.Query(
-		`SELECT i.id, bm25(items_fts) FROM items_fts
+		`SELECT i.id, bm25(items_fts, ?, ?, ?) FROM items_fts
 		 JOIN items i ON i.rowid = items_fts.rowid
-		 WHERE items_fts MATCH ? ORDER BY bm25(items_fts) LIMIT ?`, match, limit)
+		 WHERE items_fts MATCH ? ORDER BY bm25(items_fts, ?, ?, ?) LIMIT ?`,
+		titleWeight, bodyWeight, tagsWeight, match,
+		titleWeight, bodyWeight, tagsWeight, limit)
 	if err != nil {
 		return nil, err
 	}

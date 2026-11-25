@@ -285,6 +285,8 @@ Batas yang membatasi pertumbuhan:
 
 Item yang dihapus diprune berdasarkan `use_count = 0`, jadi item yang pernah dipakai recall tidak hilang hanya karena tidak dipakai dalam 180 hari. Setelah 1825 hari tanpa dipanggil, item non fundamental ikut dibuang: kalau tidak pernah dibutuhkan lagi, storage-nya tidak layak. Item fundamental dikecualikan dari dua aturan ini, jadi ilmu yang berlaku lintas project dan lintas tahun tetap tersimpan.
 
-Body 32 KB dilimitasi supaya satu item tidak bisa memakan seluruh storage. Biaya riilnya tetap di body yang benar-benar panjang: database 200 item dengan body ~200 byte tetap sekitar 504 KB. Body besar juga dipotong saat recall agar budget token tidak blown: bagian yang muat dalam budget dikembalikan, sisanya ditandai `truncated`.
+Body 32 KB dilimitasi supaya satu item tidak bisa memakan seluruh storage. Biaya riilnya tetap di body yang benar-benar panjang: database 200 item dengan body ~200 byte tetap sekitar 504 KB. Body besar juga dipotong saat recall: satu item mendapat paling banyak seperempat budget token untuk bodinya, jadi satu item raksasa tidak crowd out kandidat lain dan agent tetap melihat beberapa hasil. Bagian yang muat dikembalikan, sisanya ditandai `truncated`; teks penuhnya tetap ada dan bisa dibaca dengan `aimem show <id>`.
+
+Pencarian memberi bobot lebih pada title daripada body: title menyatakan apa isi item, body hanya menyebutnya di tengah. Jadi query yang cocok dengan title item naik ke peringkat di atas item yang cuma memancing kata yang sama di body.
 
 Skema database punya kolom `fundamental`. Database lama tanpa kolom itu dimigrasi otomatis saat binary dibuka: kolom ditambahkan dengan nilai default 0, jadi data yang sudah ada tetap utuh.
